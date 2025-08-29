@@ -1,6 +1,8 @@
 # LLM Test Report
 
-Generated: 2025-08-29 12:01:00
+Generated: 2025-08-29 16:10:11
+
+## Database: test_db
 
 ✅ **activationDate filter** → Only include clients with activationDate >= 2025-01-01
 
