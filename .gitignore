@@ -44,8 +44,6 @@ env/
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
 
 # Logs
 *.log
@@ -54,6 +52,12 @@ Thumbs.db
 *.db
 *.sqlite3
 
+# Data folder
+data/
+
 # Reports and temporary files
 reports/*.json
 reports/*.html
+
+#env remote
+.env.remote
