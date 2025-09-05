@@ -1,9 +1,7 @@
 # Environment variables
 .env
-.env.*
 .env.local
 .env.production
-.env.remote
 
 # Python
 __pycache__/
@@ -46,6 +44,8 @@ env/
 ._*
 .Spotlight-V100
 .Trashes
+ehthumbs.db
+Thumbs.db
 
 # Logs
 *.log
@@ -53,37 +53,7 @@ env/
 # Database
 *.db
 *.sqlite3
-*.sql.bak
-mysql_dump_*
 
 # Reports and temporary files
 reports/*.json
 reports/*.html
-reports/*.csv
-reports/*.xlsx
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-.hypothesis/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Temporary files
-*.tmp
-*.temp
