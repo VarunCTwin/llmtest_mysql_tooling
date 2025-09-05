@@ -58,34 +58,3 @@ data/
 # Reports and temporary files
 reports/*.json
 reports/*.html
-
-#env remote
-.env.remote
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-.tox/
-.nox/
-
-# Jupyter Notebooks
-.ipynb_checkpoints
-
-# PyCharm
-*.iml
-
-# Backup files
-*~
-*.bak
-*.tmp
-
-# Cache directories
-.cache/
-
-# Database dumps and backups
-*.sql
-*.dump
-
-# Configuration backups
-*.conf.bak
