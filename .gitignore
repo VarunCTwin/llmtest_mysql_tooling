@@ -49,7 +49,3 @@ Thumbs.db
 reports/
 reports/*.json
 reports/*.html
-
-# Environment files
-.env
-.env.*
