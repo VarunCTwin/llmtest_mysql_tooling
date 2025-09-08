@@ -2,6 +2,7 @@
 """
 Script to run queries from release_notes_demo.md using local MySQL database.
 This script parses the markdown file and generates relevant SQL queries based on the content.
+Provides comprehensive results including instructions, queries, results, and validation.
 """
 
 import os
@@ -12,6 +13,12 @@ from mysql.connector import Error
 from dotenv import load_dotenv
 import re
 from pathlib import Path
+from datetime import datetime
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich.text import Text
+from rich import print as rprint
 
 def load_env_config(env_type='local'):
     """Load MySQL configuration from environment file based on environment type."""
@@ -123,39 +130,241 @@ def categorize_feature(feature_text):
     else:
         return 'Other'
 
-def execute_queries(connection, queries):
-    """Execute the generated queries and display results."""
+def execute_queries_with_validation(connection, queries, features):
+    """Execute queries with comprehensive result display and validation."""
+    console = Console()
     cursor = connection.cursor()
     
-    for description, query in queries:
+    # Display header
+    console.print("\n" + "="*80, style="bold blue")
+    console.print("📊 COMPREHENSIVE QUERY RESULTS & VALIDATION", style="bold blue", justify="center")
+    console.print("="*80 + "\n", style="bold blue")
+    
+    # Display original instructions
+    console.print(Panel.fit(
+        "\n".join([f"• {feature}" for feature in features]),
+        title="📋 Original Instructions from Release Notes",
+        border_style="green"
+    ))
+    
+    query_results = []
+    setup_queries = []
+    analysis_queries = []
+    
+    # Separate setup and analysis queries
+    for desc, query in queries:
+        if any(keyword in desc.lower() for keyword in ['create', 'clear', 'insert']):
+            setup_queries.append((desc, query))
+        else:
+            analysis_queries.append((desc, query))
+    
+    # Execute setup queries quietly
+    console.print("\n🔧 Setting up demo environment...", style="yellow")
+    for description, query in setup_queries:
         try:
-            print(f"\n--- {description} ---")
-            print(f"Query: {query}")
+            cursor.execute(query)
+            if not query.strip().upper().startswith('SELECT'):
+                connection.commit()
+        except Error as e:
+            console.print(f"❌ Setup error in {description}: {e}", style="red")
+    
+    # Execute and display analysis queries with full details
+    console.print("\n🔍 Executing Analysis Queries:\n", style="bold cyan")
+    
+    for i, (description, query) in enumerate(analysis_queries, 1):
+        try:
+            # Create result panel
+            result_data = {
+                'instruction': description,
+                'query': query.strip(),
+                'results': [],
+                'status': 'UNKNOWN',
+                'is_bug': False,
+                'validation_message': ''
+            }
             
             cursor.execute(query)
             
-            # Handle different types of queries
             if query.strip().upper().startswith('SELECT'):
                 results = cursor.fetchall()
-                if results:
-                    # Print column headers
-                    columns = [desc[0] for desc in cursor.description]
-                    print(f"Columns: {', '.join(columns)}")
-                    
-                    # Print results
-                    for row in results:
-                        print(f"Result: {row}")
-                else:
-                    print("No results found.")
-            else:
-                connection.commit()
-                print(f"✓ Query executed successfully. Rows affected: {cursor.rowcount}")
+                columns = [desc[0] for desc in cursor.description] if cursor.description else []
+                
+                result_data['results'] = results
+                result_data['columns'] = columns
+                
+                # Validate results and determine status
+                validation = validate_query_results(description, results, features)
+                result_data['status'] = validation['status']
+                result_data['is_bug'] = validation['is_bug']
+                result_data['validation_message'] = validation['message']
+                
+                # Display comprehensive result
+                display_query_result(console, i, result_data)
+                
+            query_results.append(result_data)
                 
         except Error as e:
-            print(f"✗ Error executing query: {e}")
-            continue
+            result_data = {
+                'instruction': description,
+                'query': query.strip(),
+                'results': [],
+                'status': 'FAILED',
+                'is_bug': True,
+                'validation_message': f'Query execution error: {str(e)}'
+            }
+            display_query_result(console, i, result_data)
+            query_results.append(result_data)
     
     cursor.close()
+    
+    # Display summary
+    display_summary(console, query_results)
+    
+    return query_results
+
+def validate_query_results(description, results, features):
+    """Validate query results and determine if there are any issues."""
+    validation = {
+        'status': 'PASSED',
+        'is_bug': False,
+        'message': 'Query executed successfully with expected results'
+    }
+    
+    # Check for empty results where we expect data
+    if not results:
+        if 'count' in description.lower() or 'features' in description.lower():
+            validation['status'] = 'WARNING'
+            validation['message'] = 'No results returned - this might indicate missing data'
+        else:
+            validation['status'] = 'PASSED'
+            validation['message'] = 'No results found (may be expected)'
+        return validation
+    
+    # Validate specific query types
+    if 'count total features' in description.lower():
+        total_count = results[0][0] if results else 0
+        expected_count = len(features)
+        if total_count != expected_count:
+            validation['status'] = 'FAILED'
+            validation['is_bug'] = True
+            validation['message'] = f'Expected {expected_count} features, got {total_count}'
+        else:
+            validation['message'] = f'Correct count: {total_count} features'
+    
+    elif 'security' in description.lower():
+        security_features = [f for f in features if any(keyword in f.lower() for keyword in ['security', 'authentication', 'password', 'login'])]
+        if len(security_features) > 0 and not results:
+            validation['status'] = 'FAILED'
+            validation['is_bug'] = True
+            validation['message'] = 'Expected security features but none found in results'
+        elif results:
+            validation['message'] = f'Found {len(results)} security-related features'
+    
+    elif 'performance' in description.lower():
+        perf_features = [f for f in features if any(keyword in f.lower() for keyword in ['performance', 'optimization', 'speed', 'index'])]
+        if len(perf_features) > 0 and not results:
+            validation['status'] = 'FAILED'
+            validation['is_bug'] = True
+            validation['message'] = 'Expected performance features but none found in results'
+        elif results:
+            validation['message'] = f'Found {len(results)} performance-related features'
+    
+    return validation
+
+def display_query_result(console, query_num, result_data):
+    """Display a single query result with comprehensive formatting."""
+    # Status styling
+    status_style = {
+        'PASSED': 'green',
+        'FAILED': 'red', 
+        'WARNING': 'yellow',
+        'UNKNOWN': 'blue'
+    }[result_data['status']]
+    
+    # Status icon
+    status_icon = {
+        'PASSED': '✅',
+        'FAILED': '❌',
+        'WARNING': '⚠️',
+        'UNKNOWN': '❓'
+    }[result_data['status']]
+    
+    bug_indicator = " 🐛 BUG DETECTED" if result_data['is_bug'] else ""
+    
+    # Create panel content
+    panel_content = []
+    panel_content.append(f"[bold]Query:[/bold] {result_data['query']}")
+    panel_content.append("")
+    
+    if result_data['results']:
+        panel_content.append("[bold]Results:[/bold]")
+        if 'columns' in result_data and result_data['columns']:
+            # Create table for results
+            table = Table(show_header=True, header_style="bold magenta")
+            for col in result_data['columns']:
+                table.add_column(str(col))
+            
+            for row in result_data['results'][:10]:  # Limit to first 10 rows
+                table.add_row(*[str(cell) for cell in row])
+            
+            console.print(table)
+            
+            if len(result_data['results']) > 10:
+                panel_content.append(f"... and {len(result_data['results']) - 10} more rows")
+        else:
+            for row in result_data['results'][:5]:
+                panel_content.append(f"  {row}")
+    else:
+        panel_content.append("[dim]No results returned[/dim]")
+    
+    panel_content.append("")
+    panel_content.append(f"[bold]Validation:[/bold] {result_data['validation_message']}")
+    
+    # Display panel
+    console.print(Panel(
+        "\n".join(panel_content),
+        title=f"Query {query_num}: {result_data['instruction']} {status_icon}{bug_indicator}",
+        border_style=status_style,
+        title_align="left"
+    ))
+    console.print("")
+
+def display_summary(console, query_results):
+    """Display execution summary."""
+    total_queries = len(query_results)
+    passed = sum(1 for r in query_results if r['status'] == 'PASSED')
+    failed = sum(1 for r in query_results if r['status'] == 'FAILED')
+    warnings = sum(1 for r in query_results if r['status'] == 'WARNING')
+    bugs_detected = sum(1 for r in query_results if r['is_bug'])
+    
+    # Create summary table
+    summary_table = Table(title="📈 Execution Summary", show_header=True, header_style="bold blue")
+    summary_table.add_column("Metric", style="cyan")
+    summary_table.add_column("Count", justify="right")
+    summary_table.add_column("Status", justify="center")
+    
+    summary_table.add_row("Total Queries", str(total_queries), "ℹ️")
+    summary_table.add_row("Passed", str(passed), "✅" if passed > 0 else "➖")
+    summary_table.add_row("Failed", str(failed), "❌" if failed > 0 else "✅")
+    summary_table.add_row("Warnings", str(warnings), "⚠️" if warnings > 0 else "✅")
+    summary_table.add_row("Bugs Detected", str(bugs_detected), "🐛" if bugs_detected > 0 else "✅")
+    
+    console.print("\n")
+    console.print(summary_table)
+    
+    # Overall status
+    if bugs_detected > 0 or failed > 0:
+        overall_status = "❌ ISSUES DETECTED"
+        status_style = "red"
+    elif warnings > 0:
+        overall_status = "⚠️ WARNINGS PRESENT"
+        status_style = "yellow"
+    else:
+        overall_status = "✅ ALL TESTS PASSED"
+        status_style = "green"
+    
+    console.print(f"\n[{status_style}][bold]Overall Status: {overall_status}[/bold][/{status_style}]")
+    console.print(f"\n[dim]Execution completed at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}[/dim]")
 
 def main():
     """Main function to orchestrate the demo."""
@@ -195,12 +404,12 @@ def main():
     for i, feature in enumerate(features, 1):
         print(f"  {i}. {feature}")
     
-    # Generate and execute queries
+    # Generate and execute queries with comprehensive results
     print(f"\n🔍 Generating demo queries...")
     queries = generate_demo_queries(features)
     
-    print(f"\n⚡ Executing {len(queries)} queries...")
-    execute_queries(connection, queries)
+    print(f"\n⚡ Executing {len(queries)} queries with validation...")
+    results = execute_queries_with_validation(connection, queries, features)
     
     # Close connection
     connection.close()

@@ -49,3 +49,4 @@ Thumbs.db
 reports/
 reports/*.json
 reports/*.html
+reports/*.md
