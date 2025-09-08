@@ -172,6 +172,6 @@ python scripts/run_from_demo_file.py --help
 
 **Environment Configuration:**
 - Ensure `.env.local` and `.env.remote` files are properly configured
-- Check that environment files are not tracked in git (they should be gitignored)
+- Check that environment files are not tracked in git they should be gitignored or do not push your env changes containing credentials to your repository for security purposes 
 - Verify database credentials and network access for remote connections
 
