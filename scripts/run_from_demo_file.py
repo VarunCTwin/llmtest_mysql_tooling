@@ -6,15 +6,18 @@ This script parses the markdown file and generates relevant SQL queries based on
 
 import os
 import sys
+import argparse
 import mysql.connector
 from mysql.connector import Error
 from dotenv import load_dotenv
 import re
 from pathlib import Path
 
-def load_env_config(env_file='../.env.local'):
-    """Load MySQL configuration from environment file."""
+def load_env_config(env_type='local'):
+    """Load MySQL configuration from environment file based on environment type."""
+    env_file = f'../.env.{env_type}'
     load_dotenv(env_file)
+    print(f"Loading configuration from: {env_file}")
     
     config = {
         'host': os.getenv('MYSQL_HOST', 'localhost'),
@@ -156,11 +159,20 @@ def execute_queries(connection, queries):
 
 def main():
     """Main function to orchestrate the demo."""
-    print("🚀 Starting Release Notes Demo with Local MySQL")
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Run release notes demo with MySQL database')
+    parser.add_argument('-env', '--environment', 
+                       choices=['local', 'remote'], 
+                       default='local',
+                       help='Environment to use: local or remote (default: local)')
+    
+    args = parser.parse_args()
+    
+    print(f"🚀 Starting Release Notes Demo with {args.environment.upper()} MySQL")
     print("=" * 50)
     
     # Load configuration
-    config = load_env_config('../.env.local')
+    config = load_env_config(args.environment)
     print(f"Database config: {config['user']}@{config['host']}:{config['port']}/{config['database']}")
     
     # Connect to database
