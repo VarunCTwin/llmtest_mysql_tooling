@@ -46,6 +46,7 @@ Thumbs.db
 *.sqlite3
 
 # Reports and temporary files
+reports/
 reports/*.json
 reports/*.html
 
